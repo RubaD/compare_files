@@ -1,0 +1,97 @@
+---
+ - hosts: Compute Control
+   tasks:
+
+   - name: Include vars
+     include_vars:
+       file: containers.yml
+   - name: create directory to copy the files to , from containers
+     file:
+      path: "{{location}}"
+      state: directory
+
+   - name: Get infos on container
+     docker_container_info:
+      name: "{{item['container']}}"
+     register: result
+     with_items:
+       - "{{ containers }}"
+     when: item.hostGroup in group_names 
+
+   - name: get files secontext
+     shell:
+       cmd: docker exec "{{item.0['container']}}"  ls -lZ "{{item.0['file_path']}}"
+     register: files_context
+     with_together:
+       - "{{ containers }}"
+       - "{{ result.results }}"
+     when: item.0.hostGroup in group_names and  item.1.container.State.Status == 'running'
+
+   - name: copy files from containers
+     shell: docker cp "{{item.0['container']}}":"{{item.0['file_path']}}" "{{location}}"
+     with_together:
+       - "{{ containers }}"
+       - "{{ result.results }}"
+
+     when: item.0.hostGroup in group_names and  item.1.container.State.Status == "running"
+
+   - name: copy files from remote nodes
+     fetch:
+       src: "{{location}}/{{item.0['file_name']}}"
+       dest: "{{location}}/{{item.0['container']}}/{{item.0['file_path']}}"
+       flat: yes
+     with_together:
+       - "{{ containers }}"
+       - "{{ result.results }}"
+     when: item.0.hostGroup in group_names and  item.1.container.State.Status == "running"
+     
+   - shell:
+       cmd: chcon "{{ item.0['stdout'].split()[4]}}" "{{location}}/{{item.1['container']}}/{{item.1['file_path']}}"
+     with_together:
+        - "{{files_context['results']}}" 
+        - "{{ containers }}"
+        - "{{ result.results }}"
+     when:  item.1.hostGroup in group_names and  item.2.container.State.Status == "running"
+     delegate_to: localhost 
+
+   - debug:
+       msg: " {{item.0['container']}} is not running "
+     with_together:
+       - "{{ containers }}"
+       - "{{ result.results }}"
+     when:   item.0.hostGroup in group_names and  item.1.container.State.Status != "running" 
+
+   - name: collect data about the file
+     copy:
+       src:  "{{item['path']}}"
+       dest: "{{item['path']}}"
+       remote_src: yes
+     diff: yes
+     check_mode: yes
+     register: files
+     with_items:
+        -  "{{Files}}"
+     when: item.hostGroup in group_names
+
+   - name: copy files from remote nodes
+     fetch:
+        src: "{{item['path']}}"
+        dest: "{{location}}"
+     with_items:
+       - "{{ Files }}"
+     when: item.hostGroup in group_names
+
+   - name: set secontext as the original file
+     file:
+       path: "{{location}}/{{inventory_hostname}}{{item.1['path']}}"
+       selevel: "{{ item.0['secontext'].split(':')[3] }}"
+       setype: "{{ item.0['secontext'].split(':')[2] }}"
+       seuser: "{{ item.0['secontext'].split(':')[0] }}"
+       serole: "{{ item.0['secontext'].split(':')[1] }}"
+     with_together:
+        - "{{ files['results'] }}"
+        - "{{ Files }}"
+     delegate_to: localhost
+     when: item.1.hostGroup in group_names
+
+

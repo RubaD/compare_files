@@ -1,0 +1,128 @@
+---
+ - name: compare files from containers
+   block:  
+    - name: collect data about the file
+      template:
+        src: "{{first_dir}}/{{item.0['container']}}/{{item.0.file_path}}"
+        dest: "{{first_dir}}/{{item.0['container']}}/{{item.0.file_path}}"
+      diff: yes
+      check_mode: yes
+      register: first_file
+ 
+    - template:
+       src: "{{sec_dir}}/{{item.0['container']}}/{{ item.0.file_path }}"
+       dest: "{{sec_dir}}/{{item.0['container']}}/{{ item.0.file_path }}"
+      diff: yes
+      check_mode: yes
+      register: sec_file
+   
+    - set_fact:
+       group_var: [" {{ item.0.file_path }} in {{item.0.container }}{{sec_file['owner']}} : {{sec_file['group']}}  to {{first_file['owner']}} : {{first_file['group']}}"]
+      when:   first_file['group'] != sec_file['group'] or   first_file['owner'] != sec_file['owner']
+
+    - set_fact:
+       changes_list: "{{ changes_list + group_var}}"
+      when:  first_file['group'] != sec_file['group'] or   first_file['owner'] != sec_file['owner']
+
+
+    - set_fact:
+       mode_var: [" {{ item.0.file_name }}'s mode in {{item.0['container']}} -->  {{sec_file['mode']}} to {{first_file['mode']}}"]
+      when: not  first_file['mode'] == sec_file['mode']
+
+
+    - set_fact:
+       changes_list: "{{ changes_list + mode_var}}"
+      when: not  first_file['mode'] == sec_file['mode']
+
+    - set_fact:
+       context_var: [" {{ item.0.file_path }}'s secontext in {{item.0.container}}  --> from  {{first_file['secontext']}} to {{sec_file['secontext']}}"]
+      when: not  first_file['secontext'] == sec_file['secontext']
+
+    - set_fact:
+       changes_list: "{{ changes_list + context_var}}"
+      when: not  first_file['secontext'] == sec_file['secontext']
+
+    - name: get the difference between the files
+      shell:
+       cmd: diff "{{sec_dir}}/{{item.0['container']}}/{{ item.0['file_path'] }}"  "{{first_dir}}/{{item.0['container']}}/{{ item.0['file_path'] }}" || true
+      register: yy
+      ignore_errors: yes
+      when: not  first_file['checksum'] == sec_file['checksum']
+      delegate_to: localhost
+
+    - name:
+      set_fact:
+       con_changes: [ { file: "{{ item.0.file_path }} in {{item.0['container']}} " , changes: "{{ yy.stdout }}" } ]
+      when: not  first_file['checksum'] == sec_file['checksum']
+
+    - name: add the difference to the list
+      set_fact:
+       content_changes: "{{ con_changes + content_changes}}"
+      when: not  first_file['checksum'] == sec_file['checksum']
+   when: containers is defined
+   delegate_to: localhost
+
+
+ - name: compare files from hosts
+   block:
+    - name: collect data about the file
+      template:
+        src: "{{first_dir}}/{{inventory_hostname}}{{item.1['path']}}"
+        dest: "{{first_dir}}/{{inventory_hostname}}{{item.1['path']}}"
+      diff: yes
+      check_mode: yes
+      register: first_file
+
+    - template:
+       src: "{{sec_dir}}/{{inventory_hostname}}{{ item.1['path'] }}"
+       dest: "{{sec_dir}}/{{inventory_hostname}}{{ item.1['path'] }}"
+      diff: yes
+      check_mode: yes
+      register: sec_file
+
+    - set_fact:
+       group_var: [" {{ item.1['path'] }}  {{sec_file['owner']}} : {{sec_file['group']}}  to {{first_file['owner']}} : {{first_file['group']}}"]
+      when:   first_file['group'] != sec_file['group'] or   first_file['owner'] != sec_file['owner']
+
+    - set_fact:
+       changes_list: "{{ changes_list + group_var}}"
+      when:  first_file['group'] != sec_file['group'] or   first_file['owner'] != sec_file['owner']
+
+
+    - set_fact:
+       mode_var: [" {{ item.1['path'] }}'s mode -->  {{sec_file['mode']}} to {{first_file['mode']}}"]
+      when: not  first_file['mode'] == sec_file['mode']
+
+
+    - set_fact:
+       changes_list: "{{ changes_list + mode_var}}"
+      when: not  first_file['mode'] == sec_file['mode']
+
+    - set_fact:
+       context_var: [" {{ item.1['path'] }}'s secontext  --> from  {{first_file['secontext']}} to {{sec_file['secontext']}}"]
+      when: not  first_file['secontext'] == sec_file['secontext']
+
+    - set_fact:
+       changes_list: "{{ changes_list + context_var}}"
+      when: not  first_file['secontext'] == sec_file['secontext']
+
+    - name: get the difference between the files
+      shell:
+       cmd: diff "{{sec_dir}}/{{inventory_hostname}}/{{ item.1['path'] }}"  "{{first_dir}}/{{inventory_hostname}}/{{ item.1['path'] }}" || true
+      register: yy
+      ignore_errors: yes
+      when: not  first_file['checksum'] == sec_file['checksum']
+      delegate_to: localhost
+
+    - name:
+      set_fact:
+       con_changes: [ { file: "{{ item.1['path'] }} " , changes: "{{ yy.stdout }}" } ]
+      when: not  first_file['checksum'] == sec_file['checksum']
+
+    - name: add the difference to the list
+      set_fact:
+       content_changes: "{{ con_changes + content_changes}}"
+      when: not  first_file['checksum'] == sec_file['checksum']
+   when: Files is defined and item.1['hostGroup'] in group_names
+   delegate_to: localhost
+
