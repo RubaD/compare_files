@@ -59,7 +59,7 @@
       set_fact:
        content_changes: "{{ con_changes + content_changes}}"
       when: not  first_file['checksum'] == sec_file['checksum']
-   when: containers is defined
+   when: containers is defined and item.0 != none
    delegate_to: localhost
 
 
@@ -123,6 +123,6 @@
       set_fact:
        content_changes: "{{ con_changes + content_changes}}"
       when: not  first_file['checksum'] == sec_file['checksum']
-   when: Files is defined and item.1['hostGroup'] in group_names
+   when: Files is defined and item.1['hostGroup'] in group_names and item.1 != none
    delegate_to: localhost
 
