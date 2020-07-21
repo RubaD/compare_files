@@ -4,7 +4,7 @@
 
    - name: Include vars
      include_vars:
-       file: containers.yml
+       file: files_info.yml
    - name: create directory to copy the files to , from containers
      file:
       path: "{{location}}"
@@ -15,7 +15,7 @@
       name: "{{item['container']}}"
      register: result
      with_items:
-       - "{{ containers }}"
+       - "{{ Containers }}"
      when: item.hostGroup in group_names 
 
    - name: get files secontext
@@ -23,14 +23,14 @@
        cmd: docker exec "{{item.0['container']}}"  ls -lZ "{{item.0['file_path']}}"
      register: files_context
      with_together:
-       - "{{ containers }}"
+       - "{{ Containers }}"
        - "{{ result.results }}"
      when: item.0.hostGroup in group_names and  item.1.container.State.Status == 'running'
 
    - name: copy files from containers
      shell: docker cp "{{item.0['container']}}":"{{item.0['file_path']}}" "{{location}}"
      with_together:
-       - "{{ containers }}"
+       - "{{ Containers }}"
        - "{{ result.results }}"
 
      when: item.0.hostGroup in group_names and  item.1.container.State.Status == "running"
@@ -41,7 +41,7 @@
        dest: "{{location}}/{{item.0['container']}}/{{item.0['file_path']}}"
        flat: yes
      with_together:
-       - "{{ containers }}"
+       - "{{ Containers }}"
        - "{{ result.results }}"
      when: item.0.hostGroup in group_names and  item.1.container.State.Status == "running"
      
@@ -49,7 +49,7 @@
        cmd: chcon "{{ item.0['stdout'].split()[4]}}" "{{location}}/{{item.1['container']}}/{{item.1['file_path']}}"
      with_together:
         - "{{files_context['results']}}" 
-        - "{{ containers }}"
+        - "{{ Containers }}"
         - "{{ result.results }}"
      when:  item.1.hostGroup in group_names and  item.2.container.State.Status == "running"
      delegate_to: localhost 
@@ -57,7 +57,7 @@
    - debug:
        msg: " {{item.0['container']}} is not running "
      with_together:
-       - "{{ containers }}"
+       - "{{ Containers }}"
        - "{{ result.results }}"
      when:   item.0.hostGroup in group_names and  item.1.container.State.Status != "running" 
 

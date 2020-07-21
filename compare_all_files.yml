@@ -4,7 +4,7 @@
 
    - name: Include vars
      include_vars:
-       file: containers.yml
+       file: files_info.yml
    
    - name: create changes list
      set_fact:
@@ -15,7 +15,7 @@
 
    - include: compare_files.yml
      with_together:
-      - "{{containers}}"
+      - "{{Containers}}"
       - "{{ Files }}"
      delegate_to: localhost
 
